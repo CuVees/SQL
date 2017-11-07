@@ -54,4 +54,28 @@ left join(
 group by 1,2
 
 )
+t5 on t1.uid=t5.uid and  t1.day_key=t4.day_key left join
+(
+#通讯录
+select date(created) as day_key
+,user_id
+from  bmdb.tb_user_addresslist where created>=idate and created< date_add(idate,INTERVAL 1 DAY)
+group by 1,2
+)t6 on t1.uid=t6.user_id and  t1.day_key=t6.day_key left join
+(
+#手机认证 个人认证 活体认证 
+select user_id,is_mobile,date(mobile_time) as mobile_time
+ ,is_geren,date(geren_time) as geren_time ,
+ is_liveness,date(liveness_time) as liveness_time
+ from bmdb.tb_user_task  
+ group by 1,2,3,4,5,6,7
+)t7 on t1.uid=t7.user_id  left join 
+(
+select uid,id,date(created_time) as day_key 
+from bmdb.tb_credit_record  where created_time>=idate and created_time<date_add(idate,INTERVAL 1 DAY) 
+group by 1,2,3
+)t8 on t1.uid=t8.uid and t1.day_key=t6.day_key
+group by 1,client_type;
+  RETURN 1;  
+END
 	
