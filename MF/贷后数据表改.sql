@@ -1,32 +1,43 @@
-select
-DATE_FORMAT(a.shouldback_day,'%Y-%m-%d') as  '应还日期'
- ,(a.shouldback_cnt-a.pre_repay_cnt-a.normal_repay_cnt)*1.0/a.shouldback_cnt as '首逾率'
- ,a.pre_repay_cnt*1.0/a.shouldback_cnt  as '提前还款率'
- ,a.normal_repay_cnt*1.0/a.shouldback_cnt  as '当日还款率'
- ,a.overdue_repay_cnt*1.0/a.shouldback_cnt  as  '逾期还款率'
- ,a.untill_overdue_cnt*1.0/a.shouldback_cnt  as '逾期率'
- from
+SELECT 
+a.operator
+,a.fengpei_cn
+,b.huishou_cnt
+,b.huishou_amount
+,b.overdue_amount
+FROM
+(
+SELECT operator,operator_id,count(DISTINCT credit_id) as fengpei_cn from tb_overdue_flow_record 
+where update_time>='2017-09-01' group by 1,2
+) a left join
+(
+ SELECT
+ t1.operator
+ ,t1.owner_id
+ ,COUNT(t1.credit_id) as huishou_cnt
+ ,COUNT(DISTINCT t1.credit_id) 
+ ,sum(t2.actual_fee) as huishou_amount
+ ,sum(t2.overdue_fee) as overdue_amount
+ FROM
  (
-    select  t1.day_key as shouldback_day 
-    ,count(distinct t1.id) as shouldback_cnt 
-    ,count(distinct case when is_front='1' then t2.credit_id else null end) as pre_repay_cnt 
-    ,count(distinct case when is_front='0' then t2.credit_id else null end) as normal_repay_cnt 
-    ,count(distinct case when is_front='-1' then t1.id else null end) as overdue_repay_cnt 
-    ,count(distinct case when t1.status in(6,8) then t1.id else null end) as untill_overdue_cnt 
-   ,(case when product_id in(1,3,5,7) then '7天' when  product_id in(2,4,6,8) then '14天' else 0 end) as type
-    from  
-    ( select date(shouldback_time) as day_key ,product_id 
-        ,id,uid,status,
-        (case when task_status in (1,2,3) then '新客' when task_status=4 then '老客' else 0 end) as diff 
-        from  bmdb.tb_credit_record 
-        where $__timeFilter(shouldback_time)   and cycle in($product_type)   group by 1,2,3 
-    )t1 left  join 
-    (select credit_id,(case when date(normal_time) > date(actual_time) then '1' 
-        when date(normal_time) = date(actual_time) then '0' 
-        when date(normal_time) < date(actual_time) then '-1' end ) as is_front 
-        from  bmdb.tb_repayment_record group by 1,2 
-    )t2  
-    on t1.id=t2.credit_id  
-    where diff ='新客'
-   group by t1.day_key
-)a group by 1
+  select
+  a.operator
+  ,a.owner_id
+  ,a.credit_id
+  from
+  (
+  SELECT operator,owner_id,credit_id from tb_overdue_record where shouldback_time>='2017-08-31'
+  group by 1,2,3
+  )a left join
+  (
+  select id as credit_id from tb_credit_record where status=7 and shouldback_time>='2017-08-31'
+  )b on a.credit_id=b.credit_id
+  where  b.credit_id is not null 
+  group by 1,2,3
+ ) t1 left JOIN
+ (
+ SELECT actual_fee,overdue_fee,credit_id from tb_repayment_record 
+ where normal_time>='2017-08-31' and normal_time<'2017-09-21'
+ GROUP BY 1,2,3
+ )t2 on t1.credit_id=t2.credit_id
+ GROUP BY 1,2
+)b on a.operator_id=b.owner_id
